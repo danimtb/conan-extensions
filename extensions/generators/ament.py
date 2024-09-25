@@ -579,6 +579,8 @@ package_xml = """\
   <maintainer email="info@conan.io">conan</maintainer>
   <license>{ref_license}</license>
 
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
@@ -704,7 +706,11 @@ cmakelists_txt = """\
 cmake_minimum_required(VERSION 3.8)
 project({ref_name})
 
+find_package(ament_cmake REQUIRED)
+
 install(FILES ${{CMAKE_SOURCE_DIR}}/package.xml DESTINATION data)
+
+ament_package()
 """
 
 gitignore = """\
@@ -852,4 +858,4 @@ class Ament(object):
         if run_paths:
             return ";".join(run_paths)
         else:
-            return ["lib"]  # default value
+            return "lib"
