@@ -710,17 +710,6 @@ find_package(ament_cmake REQUIRED)
 
 install(FILES ${{CMAKE_SOURCE_DIR}}/package.xml DESTINATION data)
 
-ament_export_targets({ref_name}Targets HAS_LIBRARY_TARGET)
-
-install(
-  TARGETS {ref_name}
-  EXPORT {ref_name}Targets
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
-
 ament_package()
 """
 
