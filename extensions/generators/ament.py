@@ -739,6 +739,7 @@ class Ament(object):
         if not output_folder.endswith("install"):
           self._conanfile.output.warning("The output folder for the Ament generator should be always 'install'. Make sure you are using '--output-folder install' in your 'conan install' command")
         root_folder = os.path.sep.join(output_folder.split(os.path.sep)[:-1])  # This should be the workspace root folder
+        print(self.conanfile.conanfile_folder)
         self._conanfile.output.info(f"ROS2 workspace root folder: {root_folder}")
         self._conanfile.output.info(f"ROS2 workspace install folder: {output_folder}")
 
@@ -781,9 +782,9 @@ class Ament(object):
         self._conanfile.output.info(f"Creating Conan direct dependency folder at: {direct_dependency_folder}")
 
         paths_content = [
-            (os.path.join(direct_dependency_folder, "package.xml"), package_xml.format(ref_name=ament_ref_name, ref_version=ref_version, ref_description=ref_description, ref_license=ref_license)),
-            (os.path.join(direct_dependency_folder, ".gitignore"), gitignore),
-            (os.path.join(direct_dependency_folder, "CMakeLists.txt"), cmakelists_txt.format(ref_name=ament_ref_name)),
+            #(os.path.join(direct_dependency_folder, "package.xml"), package_xml.format(ref_name=ament_ref_name, ref_version=ref_version, ref_description=ref_description, ref_license=ref_license)),
+            #(os.path.join(direct_dependency_folder, ".gitignore"), gitignore),
+            #(os.path.join(direct_dependency_folder, "CMakeLists.txt"), cmakelists_txt.format(ref_name=ament_ref_name)),
             # (os.path.join(install_folder, ament_ref_name, "share", "ament_index", "resource_index", "package_run_dependencies", ament_ref_name), "ament_lint_auto;ament_lint_common"),
             # (os.path.join(install_folder, ament_ref_name, "share", "ament_index", "resource_index", "packages", ament_ref_name), ""),
             # (os.path.join(install_folder, ament_ref_name, "share", "ament_index", "resource_index", "parent_prefix_path", ament_ref_name), "/opt/ros/humble"),
@@ -800,7 +801,7 @@ class Ament(object):
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "package.zsh"), package_zsh.format(ref_name=ament_ref_name)),
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "ament_prefix_path.dsv"), ament_prefix_path_dsv),
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "ament_prefix_path.sh"), ament_prefix_path_sh),
-            (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "library_path.dsv"), library_path_dsv.format(run_paths=run_paths)),
+            #(os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "library_path.dsv"), library_path_dsv.format(run_paths=run_paths)),
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "library_path.sh"), library_path_sh),
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "path.dsv"), path_dsv),
             # (os.path.join(install_folder, ament_ref_name, "share", ament_ref_name, "environment", "path.sh"), path_sh),
