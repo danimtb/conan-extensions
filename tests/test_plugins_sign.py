@@ -1,18 +1,42 @@
 import subprocess
 import tempfile
+import textwrap
 import time
 import os
 import signal
+from random import randint
 
 import pytest
 
-from tools import run
+from tools import run, save
 
 
-def run_conan_server():
+def run_conan_server(server_home, server_port):
     """
     Starts a conan_server in a non-blocking way and returns the process.
     """
+    server_conf = textwrap.dedent(f"""
+        [server]
+        jwt_secret: XlDDYgiCfvxHOoGyKsLXfHRF
+        jwt_expire_minutes: 120
+        ssl_enabled: False
+        port: {server_port}
+        host_name: localhost
+        authorize_timeout: 1800
+        disk_storage_path: ./data
+        disk_authorize_timeout: 1800
+        updown_secret: LqeuqTEdPwFsBUELXukaOSes
+
+        [write_permissions]
+        */*@*/*: *
+
+        [read_permissions]
+        */*@*/*: *
+
+        [users]
+        demo: demo
+        """)
+    save(os.path.join(server_home, "server.conf"), server_conf)
     server_process = subprocess.Popen(
         ["conan_server"],
         stdout=subprocess.PIPE,
@@ -43,8 +67,9 @@ def conan_test_with_conan_server():
     cwd = os.getcwd()
     os.chdir(current)
     run("pip install conan_server")
-    server_process = run_conan_server()
-    run("conan remote add conan_server http://127.0.0.1:9300")
+    server_port = randint(9300, 9500)
+    server_process = run_conan_server(env_vars["CONAN_SERVER_HOME"], server_port)
+    run(f"conan remote add conan_server http://localhost:{server_port}")
     run("conan remote login conan_server demo -p demo")
     run("conan remove * -c -r conan_server")
     try:
@@ -81,7 +106,7 @@ def test_example():
     # Make sure it is signing the sources too
     assert "Signing files:  ['conan_package.tgz', 'conaninfo.txt', 'conanmanifest.txt']" in out
     run("conan remove mypkg/* -c")
-    out = run("conan install --requires=mypkg/1.0")
+    out = run("conan install --requires=mypkg/1.0 -r=conan_server")
     assert "Verifying ref:  mypkg/1.0" in out
     assert "Verifying ref:  mypkg/1.0:4d8ab52ebb49f51e63d5193ed580b5a7672e23d5" in out
     assert "VERIFYING  conanfile.py" in out
