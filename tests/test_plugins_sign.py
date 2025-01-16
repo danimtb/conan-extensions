@@ -147,6 +147,19 @@ def test_sigstore():
     old_path = os.path.join(base_path, "sign_sigstore.py")
     new_path = os.path.join(base_path, "sign.py")
     os.rename(old_path, new_path)
+    config_path = os.path.join(base_path, "config.yaml")
+    save(config_path, textwrap.dedent("""
+        sign:
+          - remote: conan_server
+            references: **/**@**/**
+            private_key: keys/ec_private.pem
+            public_key: keys/ec_public.pem
+        
+        verify:
+          - remote: conan_server
+            references: **/**@**/**
+            public_key: keys/ec_public.pem
+    """))
 
     # Run the tests
     run("conan profile detect")
@@ -158,3 +171,185 @@ def test_sigstore():
     run("conan remove * -c")
     out = run("conan install --requires mypkg2/1.0 -r=conan_server")
     assert "Verifying artifacts from" in out
+
+
+def test_sigstore_should_sign_and_get_sign_keys():
+    from extensions.plugins.sign.sign_sigstore import _should_sign, _get_sign_keys
+
+    config = {
+        "sign": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    }
+    assert _should_sign("zlib/1.2.11", "conancenter", config)
+    assert "keys/ec_private.pem", "keys/ec_public.pem" == _get_sign_keys("zlib/1.2.11", "conancenter", config)
+
+    config = {
+        "sign": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    }
+    assert not _should_sign("zlib/1.2.11", "conan_server", config)
+    assert None, None is _get_sign_keys("zlib/1.2.11", "conan_server", config)
+
+    assert _should_sign("zlib/1.2.11", "conancenter", {
+        "sign": [
+            {
+                "remote": "conancenter",
+                "references": "zlib/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    })
+    assert not _should_sign("zlib/1.2.11", "my_company_remote", {
+        "sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@my_company/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    })
+    assert _should_sign("zlib/1.2.11@my_company", "my_company_remote", {
+        "sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@my_company/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    })
+    assert not _should_sign("zlib/1.2.11@my_company", "my_company_remote", {
+        "sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ],
+        "exclude_sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "zlib/**@**/**"
+            }
+        ]
+    })
+    assert not _should_sign("zlib/1.2.11", "my_company_remote", {
+        "sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ],
+        "exclude_sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@None/None"
+            }
+        ]
+    })
+    assert _should_sign("zlib/1.2.11@my_company", "my_company_remote", {
+        "sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@**/**",
+                "private_key": "keys/ec_private.pem",
+                "public_key": "keys/ec_public.pem"
+            }
+        ],
+        "exclude_sign": [
+            {
+                "remote": "my_company_remote",
+                "references": "**/**@None/None"
+            }
+        ]
+    })
+
+
+def test_sigstore_should_verify_and_get_verify_key():
+    from extensions.plugins.sign.sign_sigstore import _should_verify, _get_verify_key
+
+    config = {
+        "verify": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "public_key": "keys/ec_public.pem"
+            }
+        ]
+    }
+    assert _should_verify("zlib/1.2.11", "conancenter", config)
+    assert "keys/ec_public.pem" in _get_verify_key("zlib/1.2.11", "conancenter", config)
+
+    config = {
+        "verify": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "public_key": "keys/ec_public1.pem"
+            },
+            {
+                "remote": "conancenter",
+                "references": "zlib/**@**/**",
+                "public_key": "keys/ec_public2.pem"
+            }
+        ]
+    }
+    assert _should_verify("zlib/1.2.11", "conancenter", config)
+    assert "keys/ec_public1.pem" in _get_verify_key("zlib/1.2.11", "conancenter", config)
+
+    config = {
+        "verify": [
+            {
+                "remote": "conancenter",
+                "references": "zlib/**@**/**",
+                "public_key": "keys/ec_public2.pem"
+            },
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "public_key": "keys/ec_public1.pem"
+            }
+        ]
+    }
+    assert _should_verify("zlib/1.2.11", "conancenter", config)
+    assert "keys/ec_public2.pem" in _get_verify_key("zlib/1.2.11", "conancenter", config)
+
+    config = {
+        "verify": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@**/**",
+                "public_key": "keys/ec_public1.pem"
+            },
+            {
+                "remote": "conancenter",
+                "references": "zlib/**@**/**",
+                "public_key": "keys/ec_public2.pem"
+            }
+        ],
+        "exclude_verify": [
+            {
+                "remote": "conancenter",
+                "references": "**/**@None/None",
+            }
+        ]
+    }
+    assert not _should_verify("zlib/1.2.11", "conancenter", config)
+    assert _get_verify_key("zlib/1.2.11", "conancenter", config) is None

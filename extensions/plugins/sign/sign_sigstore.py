@@ -18,12 +18,15 @@ Environment variables:
     - CONAN_SIGSTORE_DISABLE_VERIFY: Disable plugin's verify feature.
 """
 
+import fnmatch
 import os
 import subprocess
+import yaml
 from shutil import which
 
 from conan.api.output import cli_out_write
 from conan.errors import ConanException
+from conans.model.recipe_ref import RecipeReference
 
 
 REKOR_CLI = "rekor-cli"
@@ -44,12 +47,70 @@ def _is_verify_disabled():
     return bool(os.getenv("CONAN_SIGSTORE_DISABLE_VERIFY", False))
 
 
+def _load_config():
+    yaml_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+    with open(yaml_path, "r") as file:
+        return yaml.safe_load(file)
+
+
+def _should_sign(reference, remote, config):
+    ref = RecipeReference.loads(reference)
+    reference = f"{ref.name}/{ref.version}@{ref.user}/{ref.channel}"
+
+    # Verificar reglas de exclusión de firma
+    for rule in config.get("exclude_sign", []):
+        if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+            return False
+
+    # Verificar reglas de firma
+    for rule in config.get("sign", []):
+        if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+            return True
+    return False
+
+
+def _get_sign_keys(reference, remote, config):
+    if _should_sign(reference, remote, config):
+        ref = RecipeReference.loads(reference)
+        reference = f"{ref.name}/{ref.version}@{ref.user}/{ref.channel}"
+        for rule in config.get("sign", []):
+            if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+                return rule.get("private_key"), rule.get("public_key")
+    return None, None
+
+def _should_verify(reference, remote, config):
+    ref = RecipeReference.loads(reference)
+    reference = f"{ref.name}/{ref.version}@{ref.user}/{ref.channel}"
+
+    # Verificar reglas de exclusión de verificación
+    for rule in config.get("exclude_verify", []):
+        if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+            return False
+
+    # Verificar reglas de verificación
+    for rule in config.get("verify", []):
+        if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+            return True
+    return False
+
+
+def _get_verify_key(reference, remote, config):
+    if _should_verify(reference, remote, config):
+        ref = RecipeReference.loads(reference)
+        reference = f"{ref.name}/{ref.version}@{ref.user}/{ref.channel}"
+        for rule in config.get("verify", []):
+            if fnmatch.fnmatch(remote, rule["remote"]) and fnmatch.fnmatch(reference, rule["references"]):
+                return rule.get("public_key")
+    return None
+
+
 def _check_requirements(check_verify_only=False):
     exes = [REKOR_CLI]
-    env_vars = [CONAN_SIGSTORE_PUBKEY_VAR]
+    env_vars = []
+    #env_vars = [CONAN_SIGSTORE_PUBKEY_VAR]
     if not check_verify_only:
         exes.append(OPENSSL)
-        env_vars.append(CONAN_SIGSTORE_PRIVKEY_VAR)
+        # env_vars.append(CONAN_SIGSTORE_PRIVKEY_VAR)
 
     for exe in exes:
         if not which(exe):
@@ -61,15 +122,17 @@ def _check_requirements(check_verify_only=False):
             raise ConanException(f"Missing {env_var} environment variable")
 
 
-def sign(_, artifacts_folder: str, signature_folder: str):
+def sign(ref, artifacts_folder: str, signature_folder: str):
     if _is_sign_disabled():
         cli_out_write("Sign disabled")
         return
 
     _check_requirements()
-
-    privkey_filepath = os.getenv(CONAN_SIGSTORE_PRIVKEY_VAR)
-    pubkey_filepath = os.getenv(CONAN_SIGSTORE_PUBKEY_VAR)
+    config = _load_config()
+    if _should_sign(ref, "conan_server", config):
+        privkey_filepath, pubkey_filepath = _get_sign_keys(ref, "conan_server", config)
+    else:
+        return
 
     # Sign & upload each artifact using X509
     cli_out_write(f"Signing artifacts from {artifacts_folder} to {signature_folder}, "
@@ -118,9 +181,13 @@ def verify(ref, artifacts_folder, signature_folder, files):
     if _is_verify_disabled():
         cli_out_write("Verify disabled")
         return
-    _check_requirements(check_verify_only=True)
 
-    pubkey_filepath = os.getenv(CONAN_SIGSTORE_PUBKEY_VAR)
+    _check_requirements(check_verify_only=True)
+    config = _load_config()
+    if _should_verify(ref, "conan_server", config):
+        pubkey_filepath = _get_verify_key(ref, "conan_server", config)
+    else:
+        return
 
     # Verify each artifact using X509
     cli_out_write(f"Verifying artifacts from {artifacts_folder} with {signature_folder}, "
